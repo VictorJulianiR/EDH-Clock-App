@@ -27,12 +27,6 @@ npm install @capacitor/android
 
 ## Build Android Project
 
-Create the `android/` folder:
-
-```bash
-npx cap add android
-```
-
 Sync the `www` directory with the native Android project:
 
 ```bash
