@@ -1,0 +1,1130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>cEDH Clock Enhanced v2 - VictorJuliani</title>
+    <style>
+        :root {
+            --p1-color-start: #D32F2F;
+            --p1-color-end: #B71C1C;
+            --p2-color-start: #1976D2;
+            --p2-color-end: #0D47A1;
+            --p3-color-start: #388E3C;
+            --p3-color-end: #1B5E20;
+            --p4-color-start: #FFA000;
+            --p4-color-end: #FF6F00;
+
+            --text-color: #FFFFFF;
+            --inactive-overlay: rgba(0, 0, 0, 0.5);
+            --active-glow-color: rgba(255, 255, 255, 0.8); 
+            
+            --pause-icon-color: #FFFFFF;
+            --pause-icon-stroke-color: rgba(0, 0, 0, 0.65);
+            --pause-icon-shadow-color: rgba(0,0,0,0.5);
+
+            --settings-bg: #424242;
+            --settings-hover-bg: #616161;
+            --settings-icon-color: #E0E0E0;
+
+            --timed-out-stripe1: rgba(0,0,0,0.35);
+            --timed-out-stripe2: rgba(0,0,0,0.45);
+            --timed-out-bg-start: #666666; 
+            --timed-out-bg-end: #4c4c4c;   
+
+            /* Warning Glow RGB values */
+            --yellow-warning-glow-rgb: 255, 230, 0;
+            --red-warning-glow-rgb: 255, 17, 0;
+        }
+
+        /* Keyframes for breathing glow opacity (applied to pseudo-element) */
+        @keyframes breathe-glow {
+            0%, 100% { opacity: 0.45; } 
+            50% { opacity: 1.0; }    
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            width: 100vw;
+            margin: 0;
+            background-color: #212121;
+            color: var(--text-color);
+            touch-action: manipulation;
+            overflow: hidden;
+        }
+
+        #clock-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        .quadrant {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.4s ease, opacity 0.3s ease, filter 0.2s ease; 
+            position: relative; 
+            font-weight: bold;
+            text-shadow: 0 0 5px rgba(0,0,0,0.6), 0 0 10px rgba(0,0,0,0.4);
+            padding: 10px;
+            box-sizing: border-box;
+            border-radius: 8px; 
+        }
+        .quadrant.long-pressing {
+            filter: brightness(0.7) contrast(1.1);
+        }
+
+        .quadrant::before { 
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%; 
+            background-color: var(--inactive-overlay);
+            opacity: 1;
+            transition: opacity 0.3s ease;
+            z-index: 1; 
+            border-radius: inherit; 
+            pointer-events: none;
+        }
+        
+        .quadrant > * { 
+            position: relative;
+            z-index: 2; 
+        }
+
+        .quadrant.active::before {
+            opacity: 0; 
+        }
+
+        .quadrant.active { 
+            box-shadow: inset 0 0 20px 5px var(--active-glow-color), 0 0 15px var(--active-glow-color);
+        }
+
+        .quadrant.yellow-warning::after,
+        .quadrant.red-warning::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%; 
+            border-radius: inherit; 
+            z-index: 0; 
+            pointer-events: none; 
+            animation: breathe-glow 2.2s ease-in-out infinite alternate;
+            transform: translateZ(0); 
+        }
+
+        .quadrant.yellow-warning::after {
+            box-shadow: inset 0 0 6vmin 2vmin rgba(var(--yellow-warning-glow-rgb), 1);
+        }
+
+        .quadrant.red-warning::after {
+            box-shadow: inset 0 0 8vmin 4vmin rgba(var(--red-warning-glow-rgb), 0.85);
+        }
+        
+        .quadrant.timed-out-player {
+            background-image: 
+                repeating-linear-gradient( 
+                    45deg,
+                    var(--timed-out-stripe1),
+                    var(--timed-out-stripe1) 15px,
+                    var(--timed-out-stripe2) 15px,
+                    var(--timed-out-stripe2) 30px
+                ),
+                linear-gradient(135deg, var(--timed-out-bg-start), var(--timed-out-bg-end)); 
+            cursor: not-allowed !important;
+            opacity: 0.7 !important; 
+            box-shadow: none !important; 
+        }
+        .quadrant.timed-out-player::before { 
+            opacity: 0 !important; 
+        }
+        .quadrant.timed-out-player::after { 
+            display: none !important; 
+        }
+        .quadrant.timed-out-player .player-name,
+        .quadrant.timed-out-player .time-display {
+            text-decoration: line-through;
+            text-decoration-thickness: 2px;
+            opacity: 0.8;
+        }
+
+        @keyframes flash-timeout {
+            0%, 100% { filter: brightness(100%); transform: scale(1); }
+            25% { filter: brightness(180%) contrast(150%); transform: scale(1.02); }
+            50% { filter: brightness(60%); transform: scale(0.98); }
+            75% { filter: brightness(180%) contrast(150%); transform: scale(1.02); }
+        }
+        .timeout-flash-animation {
+            animation: flash-timeout 0.8s ease-in-out;
+        }
+
+        .player-name {
+            font-size: clamp(16px, 4vmin, 30px);
+            margin-bottom: 1vh;
+            opacity: 0.9;
+        }
+
+        .time-display {
+            font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
+            font-size: clamp(32px, 12vmin, 100px);
+            letter-spacing: -0.02em;
+        }
+
+        #pause-button {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 18vmin; height: 18vmin; max-width: 100px; max-height: 100px;
+            background-color: transparent; color: var(--pause-icon-color);
+            display: flex; align-items: center; justify-content: center;
+            font-size: clamp(40px, 12vmin, 70px); cursor: pointer; user-select: none;
+            border-radius: 50%; z-index: 10; transition: transform 0.1s ease;
+            -webkit-text-stroke: 1.5px var(--pause-icon-stroke-color);
+            text-stroke: 1.5px var(--pause-icon-stroke-color);
+            paint-order: stroke fill; text-shadow: 2px 2px 5px var(--pause-icon-shadow-color);
+        }
+        #pause-button:active { transform: translate(-50%, -50%) scale(0.92); }
+
+        #settings-toggle {
+            position: fixed; top: 20px; right: 20px; background: var(--settings-bg);
+            color: var(--settings-icon-color); border: none; width: 50px; height: 50px;
+            font-size: 24px; border-radius: 50%; cursor: pointer; z-index: 1001;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+            transition: background-color 0.2s ease, transform 0.1s ease;
+        }
+        #settings-toggle:hover { background-color: var(--settings-hover-bg); }
+        #settings-toggle:active { transform: scale(0.95); }
+
+        #settings-modal {
+            display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%;
+            overflow: auto; background-color: rgba(0,0,0,0.5); -webkit-backdrop-filter: blur(8px);
+            backdrop-filter: blur(8px); align-items: center; justify-content: center;
+        }
+        .settings-content {
+            background-color: rgba(50, 50, 50, 0.92); margin: auto; padding: 25px 30px;
+            border: 1px solid #555; width: 90%; max-width: 550px; 
+            border-radius: 12px;
+            color: var(--text-color); box-shadow: 0 5px 25px rgba(0,0,0,0.3);
+        }
+        .settings-content h2 { margin-top: 0; margin-bottom: 20px; text-align: center; font-size: 1.8em; color: #fafafa; }
+        
+        .settings-main-actions { 
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 25px;
+        }
+        .settings-main-actions button {
+            padding: 12px 20px; border: none; border-radius: 6px; cursor: pointer;
+            font-weight: bold; font-size: 0.95em; transition: background-color 0.2s ease, transform 0.1s ease;
+            flex-basis: 48%; 
+        }
+        .settings-main-actions button:active { transform: scale(0.97); }
+        .settings-main-actions #apply-settings { background-color: #4CAF50; color: white; }
+        .settings-main-actions #apply-settings:hover { background-color: #45a049; }
+        .settings-main-actions #close-settings { background-color: #f44336; color: white; }
+        .settings-main-actions #close-settings:hover { background-color: #e53935; }
+
+        .settings-content label { display: block; margin-bottom: 8px; font-weight: 500; font-size: 0.95em; color: #ddd; }
+        .settings-content input[type="number"],
+        .settings-content input[type="text"] { 
+            width: 100%; padding: 12px; margin-bottom: 20px; border-radius: 6px; border: 1px solid #666;
+            background-color: #333; color: var(--text-color); box-sizing: border-box; font-size: 1em;
+        }
+        .settings-content .color-setting-group { display: flex; align-items: center; margin-bottom: 15px; }
+        .settings-content .color-setting-group label { flex-basis: 120px; margin-bottom: 0; } 
+        .settings-content input[type="color"] {
+            padding: 0; border: 1px solid #666; border-radius: 6px; cursor: pointer; height: 40px;
+            width: 60px; margin-left: 10px; -webkit-appearance: none; -moz-appearance: none; appearance: none; background: none;
+        }
+        .settings-content input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; border-radius: 5px; }
+        .settings-content input[type="color"]::-webkit-color-swatch { border: none; border-radius: 5px; }
+        .settings-content input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
+        
+        .settings-collapsible {
+            background-color: rgba(60,60,60,0.7);
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border: 1px solid #505050;
+        }
+        .settings-collapsible summary {
+            padding: 12px 15px;
+            font-weight: bold;
+            cursor: pointer;
+            outline: none;
+            color: #e0e0e0;
+            transition: background-color 0.2s ease;
+            list-style-position: inside; 
+        }
+        .settings-collapsible summary:hover {
+            background-color: rgba(75,75,75,0.7);
+        }
+        .settings-collapsible[open] summary {
+            border-bottom: 1px solid #505050;
+            background-color: rgba(70,70,70,0.8);
+        }
+        .settings-collapsible .collapsible-content {
+            padding: 15px 20px;
+        }
+        .settings-collapsible .collapsible-content label { 
+            font-size: 0.9em;
+            color: #ccc;
+        }
+        .settings-collapsible .collapsible-content input[type="text"] {
+            padding: 10px; margin-bottom: 15px; font-size: 0.95em;
+        }
+        .settings-checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .settings-checkbox-group input[type="checkbox"] {
+            margin-right: 12px;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            accent-color: var(--active-glow-color); 
+        }
+        .settings-checkbox-group label {
+            margin-bottom: 0;
+            font-weight: normal;
+            color: #ddd;
+            font-size: 0.9em;
+        }
+
+        .settings-divider {
+            height: 1px; background-color: #5f5f5f; margin: 25px 0;
+        }
+        .settings-howto-section h3 {
+            font-size: 1.2em; color: #f0f0f0; margin-bottom: 12px; text-align: left;
+        }
+        .settings-howto-section ul {
+            list-style-type: disc; padding-left: 25px; margin-top: 0; margin-bottom: 15px;
+            font-size: 0.9em; line-height: 1.6; color: #ccc;
+        }
+        .settings-howto-section li::marker { color: #aaa; }
+        .settings-credits {
+            text-align: center; font-size: 0.85em; color: #b0b0b0; margin-top: 20px;
+            font-style: italic;
+        }
+        .settings-credits a {
+            color: #c0c0c0; text-decoration: none;
+        }
+        .settings-credits a:hover {
+            color: #ffffff; text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div id="clock-container">
+        <div class="quadrant" id="player1" data-player-index="0">
+            <span class="player-name">Player 1</span>
+            <span class="time-display" id="time1">00:00</span>
+        </div>
+        <div class="quadrant" id="player2" data-player-index="1">
+            <span class="player-name">Player 2</span>
+            <span class="time-display" id="time2">00:00</span>
+        </div>
+        <div class="quadrant" id="player3" data-player-index="3"> 
+            <span class="player-name">Player 4</span>
+            <span class="time-display" id="time4">00:00</span>
+        </div>
+        <div class="quadrant" id="player4" data-player-index="2"> 
+            <span class="player-name">Player 3</span>
+            <span class="time-display" id="time3">00:00</span>
+        </div>
+        <div id="pause-button">▶️</div>
+    </div>
+
+    <button id="settings-toggle">⚙️</button>
+
+    <div id="settings-modal">
+        <div class="settings-content">
+            <h2>Settings</h2>
+
+            <div class="settings-main-actions">
+                <button id="apply-settings">Apply Settings & Reset Game</button>
+                <button id="close-settings">Close</button>
+            </div>
+
+            <details class="settings-collapsible" open>
+                <summary>Timer Settings</summary>
+                <div class="collapsible-content">
+                    <label for="initial-base-time">Base Time (minutes):</label>
+                    <input type="number" id="initial-base-time" value="20" min="1">
+
+                    <label for="time-addition-seconds">Addition per turn (seconds):</label>
+                    <input type="number" id="time-addition-seconds" value="0" min="0">
+
+                    <div class="settings-checkbox-group" style="margin-top: 15px;"> 
+                        <input type="checkbox" id="full-rotation-increment-toggle">
+                        <label for="full-rotation-increment-toggle">Increment time only after player completes their official turn in expected sequence (ignore priority passes)</label>
+                    </div>
+                </div>
+            </details>
+            
+            <details class="settings-collapsible">
+                <summary>Player Customizations</summary>
+                <div class="collapsible-content">
+                    <div>
+                        <label for="p1-name-input">Player 1 Name:</label>
+                        <input type="text" id="p1-name-input" placeholder="Player 1">
+                        <div class="color-setting-group">
+                            <label for="p1-color-start-input">P1 Colors Start:</label>
+                            <input type="color" id="p1-color-start-input" value="#9128d2">
+                            <label for="p1-color-end-input" style="margin-left:10px;">End:</label>
+                            <input type="color" id="p1-color-end-input" value="#4a148c">
+                        </div>
+                    </div>
+                    <hr style="border-color: #555; margin: 15px 0;">
+                    <div>
+                        <label for="p2-name-input">Player 2 Name:</label>
+                        <input type="text" id="p2-name-input" placeholder="Player 2">
+                        <div class="color-setting-group">
+                            <label for="p2-color-start-input">P2 Colors Start:</label>
+                            <input type="color" id="p2-color-start-input" value="#1976D2">
+                            <label for="p2-color-end-input" style="margin-left:10px;">End:</label>
+                            <input type="color" id="p2-color-end-input" value="#0D47A1">
+                        </div>
+                    </div>
+                    <hr style="border-color: #555; margin: 15px 0;">
+                    <div>
+                        <label for="p3-name-input">Player 3 Name:</label>
+                        <input type="text" id="p3-name-input" placeholder="Player 3">
+                        <div class="color-setting-group">
+                            <label for="p3-color-start-input">P3 Colors Start:</label>
+                            <input type="color" id="p3-color-start-input" value="#388E3C">
+                            <label for="p3-color-end-input" style="margin-left:10px;">End:</label>
+                            <input type="color" id="p3-color-end-input" value="#1B5E20">
+                        </div>
+                    </div>
+                    <hr style="border-color: #555; margin: 15px 0;">
+                    <div>
+                        <label for="p4-name-input">Player 4 Name:</label>
+                        <input type="text" id="p4-name-input" placeholder="Player 4">
+                        <div class="color-setting-group">
+                            <label for="p4-color-start-input">P4 Colors Start:</label>
+                            <input type="color" id="p4-color-start-input" value="#8d6e63">
+                            <label for="p4-color-end-input" style="margin-left:10px;">End:</label>
+                            <input type="color" id="p4-color-end-input" value="#5d4037">
+                        </div>
+                    </div>
+                </div>
+            </details>
+
+            <details class="settings-collapsible">
+                <summary>Warning Customizations</summary>
+                <div class="collapsible-content">
+                    <div class="settings-checkbox-group">
+                        <input type="checkbox" id="long-turn-warning-toggle">
+                        <label for="long-turn-warning-toggle">Enable Long Turn Warning (active turn > 1 min)</label>
+                    </div>
+                    <div class="settings-checkbox-group">
+                        <input type="checkbox" id="low-time-warning-toggle">
+                        <label for="low-time-warning-toggle">Enable Low Total Time Warning (< 25% of initial)</label> 
+                    </div>
+                </div>
+            </details>
+            
+            <div class="settings-divider"></div>
+
+            <div class="settings-howto-section">
+                <h3>How to Play:</h3>
+                <ul>
+                    <li>Tapping a player's quadrant will start their timer or pass the turn.</li>
+                    <li>Tap your player quadrant to pass priority.</li>
+                    <li>Tap your player quadrant when it's not your turn to get priority and bypass turn order.</li>
+                    <li>The central button pauses or resumes the current player's timer.</li>
+                    <li>Pressing Spacebar on a keyboard acts like tapping the current active player's quadrant (passes turn if running, resumes/starts if paused).</li>
+                    <li>If a player's time reaches 00:00, they are automatically eliminated.</li>
+                    <li>Press and hold a player's quadrant for 3 seconds to manually eliminate them. Their time will be kept, but they are out of play.</li>
+                    <li>Use the ⚙️ icon to access settings and reset the game.</li>
+                </ul>
+            </div>
+
+            <div class="settings-credits">
+                Created by <a href="https://github.com/VictorJuliani" target="_blank" rel="noopener noreferrer">Victor Juliani</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const DEFAULT_INITIAL_BASE_MINUTES = 20;
+        const DEFAULT_INITIAL_ADDITION_SECONDS = 0;
+        const LOCAL_STORAGE_SETTINGS_KEY = 'cEDHClockSettingsEnhanced_v2_VJ';
+        const MAX_PLAYERS = 4;
+        const LONG_PRESS_DURATION = 3000;
+        const LONG_TURN_THRESHOLD_SECONDS = 60; 
+        const LOW_TIME_PERCENTAGE_THRESHOLD = 0.25;
+
+        // Updated to match default HTML color picker values
+        const DEFAULT_PLAYER_CONFIGS = [
+            { name: "Player 1", colorStart: '#9128d2', colorEnd: '#4a148c', cssVarStart: '--p1-color-start', cssVarEnd: '--p1-color-end' },
+            { name: "Player 2", colorStart: '#1976D2', colorEnd: '#0D47A1', cssVarStart: '--p2-color-start', cssVarEnd: '--p2-color-end' },
+            { name: "Player 3", colorStart: '#388E3C', colorEnd: '#1B5E20', cssVarStart: '--p3-color-start', cssVarEnd: '--p3-color-end' },
+            { name: "Player 4", colorStart: '#8d6e63', colorEnd: '#5d4037', cssVarStart: '--p4-color-start', cssVarEnd: '--p4-color-end' }
+        ];
+
+        let playerTimes = [];
+        let playerNames = DEFAULT_PLAYER_CONFIGS.map(p => p.name);
+        let playerOriginalBg = Array(MAX_PLAYERS).fill('');
+        let activePlayerIndex = -1; 
+        let currentTurnPlayerIndex = 0; 
+        let timerInterval = null;
+        let isPaused = true;
+        let initialBaseTimeMinutes = DEFAULT_INITIAL_BASE_MINUTES;
+        let timeAdditionSecondsPerTurn = DEFAULT_INITIAL_ADDITION_SECONDS;
+        let fullscreenAttemptedInLandscape = false;
+        let gameHasStartedOnce = false; 
+        
+        let longPressTimers = [null, null, null, null];
+        let longPressActionTakenFlags = [false, false, false, false];
+
+        let isLongTurnWarningEnabled = false;
+        let isLowTimeWarningEnabled = false;
+        let playerTurnStartTimestamps = [null, null, null, null]; 
+
+        let isFullRotationIncrementEnabled = false; 
+        let mainTurnHolderIndex = 0;             
+
+        let audioContext;
+        function initAudioContext() {
+            if (!audioContext) {
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                } catch (e) { console.warn("Web Audio API not supported."); }
+            }
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+        }
+        document.addEventListener('click', initAudioContext, { once: true });
+        document.addEventListener('touchstart', initAudioContext, { once: true });
+
+        function playBeep(frequency = 440, duration = 0.1, type = 'sine', volume = 0.3) {
+            if (!audioContext) { return; }
+            if (audioContext.state === 'suspended') { audioContext.resume(); }
+            try {
+                const o = audioContext.createOscillator(), g = audioContext.createGain();
+                o.connect(g); g.connect(audioContext.destination);
+                o.type = type; o.frequency.setValueAtTime(frequency, audioContext.currentTime);
+                g.gain.setValueAtTime(volume, audioContext.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.00001, audioContext.currentTime + duration);
+                o.start(audioContext.currentTime); o.stop(audioContext.currentTime + duration);
+            } catch (e) { console.error("Error playing beep:", e); }
+        }
+
+        const startupMelodyNotes = [
+            { freq: 392.00, duration: 0.075, delay: 0.0, type: 'square' },
+            { freq: 466.16, duration: 0.075, delay: 0.085, type: 'square' },
+            { freq: 523.25, duration: 0.075, delay: 0.170, type: 'square' },
+            { freq: 698.46, duration: 0.180, delay: 0.255, type: 'triangle' }
+        ];
+
+        function playStartupMelody() {
+            if (!audioContext) { return; }
+            if (audioContext.state === 'suspended') { audioContext.resume(); }
+            try {
+                const now = audioContext.currentTime;
+                const overallGain = audioContext.createGain();
+                overallGain.gain.setValueAtTime(0.15, now); 
+                overallGain.connect(audioContext.destination);
+                startupMelodyNotes.forEach(note => {
+                    const o = audioContext.createOscillator(), gn = audioContext.createGain();
+                    o.connect(gn); gn.connect(overallGain);
+                    o.type = note.type || 'square';
+                    o.frequency.setValueAtTime(note.freq, now + note.delay);
+                    gn.gain.setValueAtTime(1.0, now + note.delay);
+                    gn.gain.exponentialRampToValueAtTime(0.00001, now + note.delay + note.duration);
+                    o.start(now + note.delay); o.stop(now + note.delay + note.duration);
+                });
+            } catch (e) { console.error("Error playing startup melody:", e); }
+        }
+
+        const timeDisplayElements = [
+            document.getElementById('time1'), document.getElementById('time2'),
+            document.getElementById('time3'), document.getElementById('time4')
+        ];
+        
+        const pauseButton = document.getElementById('pause-button');
+        const settingsToggleButton = document.getElementById('settings-toggle');
+        const settingsModal = document.getElementById('settings-modal');
+        const applySettingsButton = document.getElementById('apply-settings');
+        const closeSettingsButton = document.getElementById('close-settings');
+        
+        const initialBaseTimeInput = document.getElementById('initial-base-time');
+        const timeAdditionSecondsInput = document.getElementById('time-addition-seconds');
+        const fullRotationIncrementToggle = document.getElementById('full-rotation-increment-toggle');
+        
+        const playerNameInputs = [
+            document.getElementById('p1-name-input'), document.getElementById('p2-name-input'),
+            document.getElementById('p3-name-input'), document.getElementById('p4-name-input')
+        ];
+        const colorStartInputs = [
+            document.getElementById('p1-color-start-input'), document.getElementById('p2-color-start-input'),
+            document.getElementById('p3-color-start-input'), document.getElementById('p4-color-start-input')
+        ];
+        const colorEndInputs = [
+            document.getElementById('p1-color-end-input'), document.getElementById('p2-color-end-input'),
+            document.getElementById('p3-color-end-input'), document.getElementById('p4-color-end-input')
+        ];
+        const longTurnWarningToggle = document.getElementById('long-turn-warning-toggle');
+        const lowTimeWarningToggle = document.getElementById('low-time-warning-toggle');
+
+        const rootStyle = document.documentElement.style;
+
+        function getQuadrantDOM(playerIndex) {
+            return document.querySelector(`.quadrant[data-player-index="${playerIndex}"]`);
+        }
+        
+        function isPlayerEffectivelyOutOfGame(playerIndex) {
+            if (playerIndex < 0 || playerIndex >= MAX_PLAYERS) return true;
+            const q = getQuadrantDOM(playerIndex);
+            return playerTimes[playerIndex] <= 0 || (q && q.classList.contains('timed-out-player'));
+        }
+
+        function goFullScreen() {
+            const elem = document.documentElement;
+            if (elem.requestFullscreen) elem.requestFullscreen().catch(err => console.warn("FS failed:", err));
+            else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen().catch(err => console.warn("FS failed (webkit):", err));
+            else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
+        }
+
+        function attemptFullscreenOnMobileLandscape() {
+            if (fullscreenAttemptedInLandscape) return;
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.maxTouchPoints && navigator.maxTouchPoints > 2 && /MacIntel/.test(navigator.platform));
+            if (!isMobile) return;
+            const isLandscape = window.matchMedia("(orientation: landscape)").matches;
+            const isFS = !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+            if (isLandscape && !isFS) {
+                goFullScreen();
+                fullscreenAttemptedInLandscape = true; 
+            }
+        }
+        
+        function handleOrientationChangeForFlagReset() {
+            if (!window.matchMedia("(orientation: landscape)").matches) {
+                fullscreenAttemptedInLandscape = false;
+            }
+        }
+
+        if (screen.orientation && typeof screen.orientation.addEventListener === 'function') {
+            screen.orientation.addEventListener('change', handleOrientationChangeForFlagReset);
+        } else {
+            window.addEventListener('orientationchange', handleOrientationChangeForFlagReset);
+        }
+
+        function formatTime(totalSeconds) {
+            if (totalSeconds < 0) totalSeconds = 0;
+            const m = Math.floor(totalSeconds / 60);
+            const s = totalSeconds % 60;
+            return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+
+        function applyVisualWarnings() {
+            const now = performance.now();
+            for (let i = 0; i < MAX_PLAYERS; i++) {
+                const qElement = getQuadrantDOM(i);
+                if (!qElement) continue;
+
+                if (qElement.classList.contains('timed-out-player')) {
+                    qElement.classList.remove('yellow-warning', 'red-warning');
+                    continue; 
+                }
+
+                let needsYellow = false;
+                let needsRed = false;
+
+                if (isLowTimeWarningEnabled) {
+                    const lowTimeThresholdValue = (initialBaseTimeMinutes * 60) * LOW_TIME_PERCENTAGE_THRESHOLD;
+                    if (playerTimes[i] > 0 && playerTimes[i] <= lowTimeThresholdValue) {
+                        needsRed = true;
+                    }
+                }
+
+                if (isLongTurnWarningEnabled && i === activePlayerIndex && !isPaused && playerTurnStartTimestamps[i] !== null) {
+                    const currentTurnDurationSeconds = (now - playerTurnStartTimestamps[i]) / 1000;
+                    if (currentTurnDurationSeconds > LONG_TURN_THRESHOLD_SECONDS) {
+                        needsYellow = true;
+                    }
+                }
+                
+                if (needsRed) {
+                    qElement.classList.add('red-warning');
+                    qElement.classList.remove('yellow-warning'); 
+                } else if (needsYellow) { 
+                    qElement.classList.add('yellow-warning');
+                    qElement.classList.remove('red-warning'); 
+                } else { 
+                    qElement.classList.remove('red-warning');
+                    qElement.classList.remove('yellow-warning');
+                }
+            }
+        }
+
+        function updateDisplay() {
+            for (let i = 0; i < MAX_PLAYERS; i++) {
+                timeDisplayElements[i].textContent = formatTime(playerTimes[i]);
+                const qElement = getQuadrantDOM(i);
+                if (qElement) {
+                    if (i === activePlayerIndex && !isPaused && !isPlayerEffectivelyOutOfGame(i)) {
+                        qElement.classList.add('active');
+                    } else {
+                        qElement.classList.remove('active');
+                    }
+                }
+            }
+            applyVisualWarnings(); 
+            pauseButton.textContent = isPaused ? '▶️' : '⏸️';
+        }
+        
+        function stopAllTimers() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+
+        function manuallyDisablePlayer(playerIndex) {
+            const quadrant = getQuadrantDOM(playerIndex);
+            if (!quadrant || quadrant.classList.contains('timed-out-player')) {
+                return;
+            }
+            console.log(`Manually disabling ${playerNames[playerIndex]}`);
+            quadrant.classList.add('timed-out-player');
+            quadrant.classList.remove('yellow-warning', 'red-warning', 'active'); 
+            quadrant.style.backgroundImage = ''; 
+            playBeep(220, 0.15, 'sawtooth', 0.25);
+
+            if (activePlayerIndex === playerIndex) {
+                stopAllTimers();
+                isPaused = true;
+                activePlayerIndex = -1;
+            }
+            updateDisplay();
+        }
+
+        function handleTimeout(playerIndex) {
+            playerTimes[playerIndex] = 0;
+            const timedOutQuadrant = getQuadrantDOM(playerIndex);
+
+            if (timedOutQuadrant && !timedOutQuadrant.classList.contains('timed-out-player')) {
+                 timedOutQuadrant.classList.add('timed-out-player');
+                 timedOutQuadrant.classList.remove('yellow-warning', 'red-warning', 'active'); 
+                 timedOutQuadrant.style.backgroundImage = ''; 
+                 timedOutQuadrant.classList.add('timeout-flash-animation');
+                 setTimeout(() => timedOutQuadrant.classList.remove('timeout-flash-animation'), 800);
+                 playBeep(880, 0.2, 'square', 0.4); 
+                 playBeep(880, 0.2, 'square', 0.4); 
+                 //alert(`${playerNames[playerIndex]} is out of time!`);
+            }
+            
+            if (activePlayerIndex === playerIndex) {
+                stopAllTimers();
+                isPaused = true;
+                activePlayerIndex = -1;
+            }
+            updateDisplay(); 
+        }
+
+        function startTimerForPlayer(playerIndex) {
+            if (isPlayerEffectivelyOutOfGame(playerIndex)) { 
+                updateDisplay();
+                return;
+            }
+
+            stopAllTimers(); 
+            activePlayerIndex = playerIndex;
+            currentTurnPlayerIndex = playerIndex; 
+            isPaused = false; 
+            
+            playerTurnStartTimestamps.fill(null); 
+            playerTurnStartTimestamps[playerIndex] = performance.now();
+
+            if (!gameHasStartedOnce) {
+                initAudioContext(); 
+                playStartupMelody();
+                gameHasStartedOnce = true;
+            }
+
+            timerInterval = setInterval(() => {
+                if (!isPaused && playerTimes[activePlayerIndex] > 0 && !isPlayerEffectivelyOutOfGame(activePlayerIndex)) {
+                    playerTimes[activePlayerIndex]--;
+                    if (playerTimes[activePlayerIndex] <= 0) {
+                        handleTimeout(activePlayerIndex);
+                    }
+                    updateDisplay(); 
+                } else if (playerTimes[activePlayerIndex] <= 0 && !isPaused) { 
+                    handleTimeout(activePlayerIndex);
+                } else if (isPlayerEffectivelyOutOfGame(activePlayerIndex) && !isPaused) {
+                    stopAllTimers();
+                    isPaused = true;
+                    activePlayerIndex = -1;
+                    updateDisplay();
+                } else {
+                    if(isPaused) updateDisplay(); 
+                }
+            }, 1000);
+            updateDisplay();
+        }
+
+        function passTurnFromActivePlayer() {
+            if (activePlayerIndex === -1 || isPaused) return;
+            if (isPlayerEffectivelyOutOfGame(activePlayerIndex)) {
+                if (!isPaused) togglePause();
+                return;
+            }
+            
+            const playerEndingTurn = activePlayerIndex; 
+
+            if (playerTurnStartTimestamps[playerEndingTurn] !== null) {
+                playerTurnStartTimestamps[playerEndingTurn] = null;
+            }
+
+            if (isFullRotationIncrementEnabled) {
+                if (playerEndingTurn === mainTurnHolderIndex && 
+                    !isPlayerEffectivelyOutOfGame(playerEndingTurn) && 
+                    timeAdditionSecondsPerTurn > 0) {
+                    
+                    playerTimes[playerEndingTurn] += timeAdditionSecondsPerTurn;
+
+                    let nextMainTurnHolder = (mainTurnHolderIndex + 1) % MAX_PLAYERS;
+                    let advanceAttempts = 0;
+                    while (isPlayerEffectivelyOutOfGame(nextMainTurnHolder) && advanceAttempts < MAX_PLAYERS) {
+                        nextMainTurnHolder = (nextMainTurnHolder + 1) % MAX_PLAYERS;
+                        advanceAttempts++;
+                    }
+                    if (advanceAttempts < MAX_PLAYERS) {
+                        mainTurnHolderIndex = nextMainTurnHolder;
+                    }
+                }
+            } else {
+                if (playerEndingTurn !== -1 && 
+                    !isPlayerEffectivelyOutOfGame(playerEndingTurn) && 
+                    timeAdditionSecondsPerTurn > 0) {
+                    playerTimes[playerEndingTurn] += timeAdditionSecondsPerTurn;
+                }
+            }
+            
+            stopAllTimers(); 
+
+            let nextPlayer = (playerEndingTurn + 1) % MAX_PLAYERS; 
+            let attempts = 0;
+            while (isPlayerEffectivelyOutOfGame(nextPlayer) && attempts < MAX_PLAYERS) {
+                nextPlayer = (nextPlayer + 1) % MAX_PLAYERS;
+                attempts++;
+            }
+
+            if (attempts < MAX_PLAYERS && !isPlayerEffectivelyOutOfGame(nextPlayer)) {
+                startTimerForPlayer(nextPlayer); 
+            } else {
+                isPaused = true;
+                activePlayerIndex = -1; 
+                alert("No other active players remaining. Game paused.");
+            }
+            updateDisplay(); 
+        }
+
+        function handlePressStart(event, playerIndex) {
+            const quadrant = getQuadrantDOM(playerIndex);
+            if (!quadrant || isPlayerEffectivelyOutOfGame(playerIndex)) return;
+            if (event.type === 'mousedown') event.preventDefault();
+            clearTimeout(longPressTimers[playerIndex]);
+            longPressActionTakenFlags[playerIndex] = false; 
+            quadrant.classList.add('long-pressing');
+            longPressTimers[playerIndex] = setTimeout(() => {
+                if (quadrant.classList.contains('long-pressing')) {
+                    manuallyDisablePlayer(playerIndex);
+                    longPressActionTakenFlags[playerIndex] = true;
+                    quadrant.classList.remove('long-pressing'); 
+                }
+                longPressTimers[playerIndex] = null; 
+            }, LONG_PRESS_DURATION);
+        }
+
+        function handlePressEnd(event, playerIndex) {
+            const quadrant = getQuadrantDOM(playerIndex);
+            if (longPressTimers[playerIndex]) {
+                clearTimeout(longPressTimers[playerIndex]);
+                longPressTimers[playerIndex] = null; 
+            }
+            if (quadrant) quadrant.classList.remove('long-pressing');
+        }
+
+        function handleQuadrantClick(event) {
+            const clickedQuadrant = event.currentTarget;
+            const clickedPlayerIndex = parseInt(clickedQuadrant.dataset.playerIndex);
+            if (longPressActionTakenFlags[clickedPlayerIndex]) {
+                longPressActionTakenFlags[clickedPlayerIndex] = false; 
+                return;
+            }
+            if (isPlayerEffectivelyOutOfGame(clickedPlayerIndex)) {
+                alert(`${playerNames[clickedPlayerIndex]} is out of the game.`);
+                return;
+            }
+            initAudioContext(); 
+            attemptFullscreenOnMobileLandscape();
+
+            if (isPaused) { 
+                startTimerForPlayer(clickedPlayerIndex);
+                return; 
+            }
+
+            if (activePlayerIndex === clickedPlayerIndex) {
+                 passTurnFromActivePlayer(); 
+            } else { 
+                const playerEndingTurn = activePlayerIndex;
+
+                if (isFullRotationIncrementEnabled) {
+                    if (playerEndingTurn === mainTurnHolderIndex && 
+                        !isPlayerEffectivelyOutOfGame(playerEndingTurn) && 
+                        timeAdditionSecondsPerTurn > 0) {
+                        
+                        playerTimes[playerEndingTurn] += timeAdditionSecondsPerTurn;
+
+                        let nextMainTurnHolder = (mainTurnHolderIndex + 1) % MAX_PLAYERS;
+                        let advanceAttempts = 0;
+                        while (isPlayerEffectivelyOutOfGame(nextMainTurnHolder) && advanceAttempts < MAX_PLAYERS) {
+                            nextMainTurnHolder = (nextMainTurnHolder + 1) % MAX_PLAYERS;
+                            advanceAttempts++;
+                        }
+                        if (advanceAttempts < MAX_PLAYERS) {
+                            mainTurnHolderIndex = nextMainTurnHolder;
+                        }
+                    }
+                } else {
+                    if (playerEndingTurn !== -1 && 
+                        !isPlayerEffectivelyOutOfGame(playerEndingTurn) && 
+                        timeAdditionSecondsPerTurn > 0) {
+                        playerTimes[playerEndingTurn] += timeAdditionSecondsPerTurn;
+                    }
+                }
+                startTimerForPlayer(clickedPlayerIndex);
+            }
+        }
+
+        function togglePause() {
+            initAudioContext();
+            attemptFullscreenOnMobileLandscape();
+            if (isPaused) { 
+                let playerToStartCandidate;
+                if (activePlayerIndex !== -1 && !isPlayerEffectivelyOutOfGame(activePlayerIndex)) {
+                    playerToStartCandidate = activePlayerIndex;
+                } else {
+                    playerToStartCandidate = currentTurnPlayerIndex; 
+                    if (isPlayerEffectivelyOutOfGame(playerToStartCandidate)) playerToStartCandidate = 0;
+                }
+                
+                let attempts = 0;
+                while (isPlayerEffectivelyOutOfGame(playerToStartCandidate) && attempts < MAX_PLAYERS) {
+                    playerToStartCandidate = (playerToStartCandidate + 1) % MAX_PLAYERS;
+                    attempts++;
+                }
+
+                if (!isPlayerEffectivelyOutOfGame(playerToStartCandidate)) {
+                    startTimerForPlayer(playerToStartCandidate); 
+                } else { 
+                    alert("All players are out of the game. Reset or adjust settings.");
+                    isPaused = true; 
+                    activePlayerIndex = -1;
+                    updateDisplay(); 
+                }
+            } else { 
+                isPaused = true;
+                stopAllTimers(); 
+                updateDisplay(); 
+            }
+        }
+        
+        pauseButton.addEventListener('click', togglePause);
+        document.querySelectorAll('.quadrant').forEach(quad => {
+            const playerIndex = parseInt(quad.dataset.playerIndex);
+            quad.addEventListener('click', handleQuadrantClick); 
+            quad.addEventListener('mousedown', (e) => handlePressStart(e, playerIndex));
+            quad.addEventListener('touchstart', (e) => handlePressStart(e, playerIndex), { passive: false });
+            quad.addEventListener('mouseup', (e) => handlePressEnd(e, playerIndex));
+            quad.addEventListener('mouseleave', (e) => handlePressEnd(e, playerIndex)); 
+            quad.addEventListener('touchend', (e) => handlePressEnd(e, playerIndex));
+            quad.addEventListener('touchcancel', (e) => handlePressEnd(e, playerIndex));
+            quad.addEventListener('contextmenu', (e) => e.preventDefault());
+        });
+
+        document.addEventListener('keydown', (event) => {
+            const activeElement = document.activeElement;
+            const isInputActive = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.isContentEditable);
+            const isModalOpen = settingsModal.style.display === 'flex';
+            if (isModalOpen || isInputActive) return; 
+            if (event.key === ' ' || event.code === 'Space') {
+                event.preventDefault();
+                initAudioContext(); 
+                attemptFullscreenOnMobileLandscape(); 
+                if (!isPaused && activePlayerIndex !== -1 && !isPlayerEffectivelyOutOfGame(activePlayerIndex)) {
+                    passTurnFromActivePlayer(); 
+                } else if (isPaused) {
+                    let playerToStartCandidate;
+                    if (activePlayerIndex !== -1 && !isPlayerEffectivelyOutOfGame(activePlayerIndex)) {
+                        playerToStartCandidate = activePlayerIndex;
+                    } else {
+                        playerToStartCandidate = currentTurnPlayerIndex; 
+                        if (isPlayerEffectivelyOutOfGame(playerToStartCandidate)) playerToStartCandidate = 0; 
+                    }
+                    
+                    let attempts = 0;
+                    while (isPlayerEffectivelyOutOfGame(playerToStartCandidate) && attempts < MAX_PLAYERS) {
+                        playerToStartCandidate = (playerToStartCandidate + 1) % MAX_PLAYERS;
+                        attempts++;
+                    }
+                    
+                    if (!isPlayerEffectivelyOutOfGame(playerToStartCandidate)) {
+                        startTimerForPlayer(playerToStartCandidate); 
+                    } else {
+                        alert("No player can be started. Reset or adjust settings.");
+                        playBeep(200, 0.15, 'sawtooth', 0.2);
+                    }
+                } else playBeep(220, 0.1, 'sine', 0.2);
+            }
+        });
+
+        function applyAndResetGame() {
+            let baseTimeFromInput = parseInt(initialBaseTimeInput.value);
+            initialBaseTimeMinutes = (baseTimeFromInput && baseTimeFromInput >= 1) ? baseTimeFromInput : DEFAULT_INITIAL_BASE_MINUTES;
+            if (initialBaseTimeMinutes < 1) initialBaseTimeMinutes = 1;
+
+            let additionFromInput = parseInt(timeAdditionSecondsInput.value);
+            timeAdditionSecondsPerTurn = (additionFromInput && additionFromInput >= 0) ? additionFromInput : DEFAULT_INITIAL_ADDITION_SECONDS;
+            if (timeAdditionSecondsPerTurn < 0) timeAdditionSecondsPerTurn = 0;
+
+            isLongTurnWarningEnabled = longTurnWarningToggle.checked;
+            isLowTimeWarningEnabled = lowTimeWarningToggle.checked;
+            isFullRotationIncrementEnabled = fullRotationIncrementToggle.checked; 
+
+            let settingsToSave = {
+                initialBaseTime: initialBaseTimeMinutes,
+                timeAdditionSeconds: timeAdditionSecondsPerTurn,
+                longTurnWarningEnabled: isLongTurnWarningEnabled,
+                lowTimeWarningEnabled: isLowTimeWarningEnabled,
+                fullRotationIncrementEnabled: isFullRotationIncrementEnabled 
+            };
+            
+            for (let i = 0; i < MAX_PLAYERS; i++) {
+                const config = DEFAULT_PLAYER_CONFIGS[i]; 
+                playerNames[i] = playerNameInputs[i].value.trim() || config.name;
+                playerNameInputs[i].value = playerNames[i]; 
+                settingsToSave[`p${i+1}Name`] = playerNames[i];
+                
+                const startColor = colorStartInputs[i].value;
+                const endColor = colorEndInputs[i].value;  
+
+                rootStyle.setProperty(config.cssVarStart, startColor);
+                rootStyle.setProperty(config.cssVarEnd, endColor);
+                playerOriginalBg[i] = `linear-gradient(135deg, ${startColor}, ${endColor})`;
+                
+                settingsToSave[`p${i+1}ColorStart`] = startColor;
+                settingsToSave[`p${i+1}ColorEnd`] = endColor;
+
+                const qElement = getQuadrantDOM(i);
+                if (qElement) {
+                    const nameSpan = qElement.querySelector('.player-name');
+                    if (nameSpan) nameSpan.textContent = playerNames[i];
+                }
+            }
+            
+            localStorage.setItem(LOCAL_STORAGE_SETTINGS_KEY, JSON.stringify(settingsToSave));
+            resetGame(); 
+        }
+
+        function resetGame() {
+            stopAllTimers();
+            playerTimes = Array(MAX_PLAYERS).fill(initialBaseTimeMinutes * 60);
+            activePlayerIndex = -1; 
+            currentTurnPlayerIndex = 0; 
+            isPaused = true;
+            fullscreenAttemptedInLandscape = false;
+            gameHasStartedOnce = false; 
+            longPressTimers.forEach((_, i) => clearTimeout(longPressTimers[i]));
+            longPressActionTakenFlags = [false, false, false, false]; 
+            playerTurnStartTimestamps.fill(null);
+            mainTurnHolderIndex = 0; 
+
+            document.querySelectorAll('.quadrant').forEach(q => {
+                q.classList.remove('timed-out-player', 'active', 'timeout-flash-animation', 'long-pressing', 'yellow-warning', 'red-warning');
+                const logicalIndex = parseInt(q.dataset.playerIndex);
+                
+                if (playerOriginalBg[logicalIndex] && playerOriginalBg[logicalIndex].startsWith('linear-gradient')) {
+                     q.style.backgroundImage = playerOriginalBg[logicalIndex];
+                } else {
+                    console.warn(`playerOriginalBg invalid or not set for player ${logicalIndex}. Using CSS variables from config.`);
+                    const conf = DEFAULT_PLAYER_CONFIGS[logicalIndex];
+                    q.style.backgroundImage = `linear-gradient(135deg, var(${conf.cssVarStart}), var(${conf.cssVarEnd}))`;
+                }
+
+                const nameSpan = q.querySelector('.player-name');
+                if (nameSpan) nameSpan.textContent = playerNames[logicalIndex];
+            });
+            updateDisplay();
+        }
+        
+        function loadSettings() {
+            const savedSettings = localStorage.getItem(LOCAL_STORAGE_SETTINGS_KEY);
+
+            if (savedSettings) {
+                const settings = JSON.parse(savedSettings);
+                initialBaseTimeInput.value = (settings.initialBaseTime && parseInt(settings.initialBaseTime) >= 1) ? 
+                                         parseInt(settings.initialBaseTime) : DEFAULT_INITIAL_BASE_MINUTES;
+                timeAdditionSecondsInput.value = (settings.timeAdditionSeconds !== undefined && parseInt(settings.timeAdditionSeconds) >= 0) ?
+                                                 parseInt(settings.timeAdditionSeconds) : DEFAULT_INITIAL_ADDITION_SECONDS;
+                
+                for (let i = 0; i < MAX_PLAYERS; i++) {
+                    const config = DEFAULT_PLAYER_CONFIGS[i];
+                    playerNameInputs[i].value = settings[`p${i+1}Name`] || config.name;
+                    colorStartInputs[i].value = (settings[`p${i+1}ColorStart`] && settings[`p${i+1}ColorStart`].startsWith('#')) ? settings[`p${i+1}ColorStart`] : config.colorStart;
+                    colorEndInputs[i].value = (settings[`p${i+1}ColorEnd`] && settings[`p${i+1}ColorEnd`].startsWith('#')) ? settings[`p${i+1}ColorEnd`] : config.colorEnd;
+                }
+                isLongTurnWarningEnabled = settings.longTurnWarningEnabled === true; 
+                longTurnWarningToggle.checked = isLongTurnWarningEnabled;
+                isLowTimeWarningEnabled = settings.lowTimeWarningEnabled === true; 
+                lowTimeWarningToggle.checked = isLowTimeWarningEnabled;
+                isFullRotationIncrementEnabled = settings.fullRotationIncrementEnabled === true; 
+                fullRotationIncrementToggle.checked = isFullRotationIncrementEnabled;             
+
+            } else {
+                initialBaseTimeInput.value = DEFAULT_INITIAL_BASE_MINUTES;
+                timeAdditionSecondsInput.value = DEFAULT_INITIAL_ADDITION_SECONDS;
+                for (let i = 0; i < MAX_PLAYERS; i++) {
+                    const config = DEFAULT_PLAYER_CONFIGS[i];
+                    playerNameInputs[i].value = config.name;
+                    colorStartInputs[i].value = config.colorStart;
+                    colorEndInputs[i].value = config.colorEnd;
+                }
+                isLongTurnWarningEnabled = false;
+                longTurnWarningToggle.checked = false;
+                isLowTimeWarningEnabled = false;
+                lowTimeWarningToggle.checked = false;
+                isFullRotationIncrementEnabled = false; 
+                fullRotationIncrementToggle.checked = false;
+            }
+            applyAndResetGame(); 
+        }
+
+        settingsToggleButton.addEventListener('click', () => { settingsModal.style.display = 'flex'; });
+        closeSettingsButton.addEventListener('click', () => { settingsModal.style.display = 'none'; });
+        applySettingsButton.addEventListener('click', () => { applyAndResetGame(); settingsModal.style.display = 'none'; });
+        window.addEventListener('click', (event) => { if (event.target == settingsModal) settingsModal.style.display = 'none'; });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSettings();
+            // Corrected Low Time Warning label for consistency with JS constant
+            const lowTimeWarningLabel = document.querySelector('label[for="low-time-warning-toggle"]');
+            if(lowTimeWarningLabel) {
+                lowTimeWarningLabel.textContent = `Enable Low Total Time Warning (< ${LOW_TIME_PERCENTAGE_THRESHOLD * 100}% of initial)`;
+            }
+        });
+    </script>
+</body>
+</html>
